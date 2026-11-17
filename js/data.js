@@ -29,22 +29,39 @@ const G = GIFT_IDS.map((id, i) => {
 /* ---------- Кейсы ---------- */
 const CASE_DEFS = [
   { id: 'daily', name: 'Ежедневный', sub: 'Бесплатно раз в сутки', free: true, theme: ['#4b3a9e', '#1d1640'], items: [85,84,73,76,77,78,80,87,98,99,100,101,104,116,117,122,123,124,56,2,22,60,105], cover: [105,85,99] },
-  { id: 'bears', name: 'Мишки', sub: 'Плюшевая коллекция', theme: ['#8a5a3a', '#2a1a14'], items: [126,127,128,129,130,131,132,133,134,135,136,33,14,52,12,34,58], cover: [133,134,136] },
-  { id: 'winter', name: 'Зимний', sub: 'Тепло и уют', theme: ['#2f6fa8', '#0f2036'], items: [87,99,100,103,106,107,116,119,121,122,123,124,79,69,88,105,73,65,97,64], cover: [124,87,79] },
-  { id: 'night', name: 'Ночной', sub: 'Мистика и магия', theme: ['#6a3fb5', '#1a0f33'], items: [38,81,92,93,94,95,96,97,109,110,111,112,113,114,115,126,152,153,76,37,14,66], cover: [110,113,96] },
-  { id: 'love', name: 'Любовь', sub: 'Для самых близких', theme: ['#b04a78', '#2e1020'], items: [5,24,32,34,40,47,49,57,60,66,82,83,125,23,7,119,33,134,48,84,43,35], cover: [125,24,40] },
-  { id: 'lux', name: 'Люкс', sub: 'Дорого и статусно', theme: ['#b58a3c', '#2a1f0c'], items: [15,16,68,31,7,23,29,30,11,59,67,70,4,35,41,143,142,140,26,75,139,10,19], cover: [16,68,15] },
-  { id: 'legend', name: 'Легенды', sub: 'Только топ', theme: ['#d6a64b', '#241a08'], items: [15,16,68,31,6,1,0,3,5,54,41,29,30,32,10,8,139,150,7,23,11,59,25,26], cover: [15,31,1] }
+  { id: 'bears', rtp: .95, price: 39, name: 'Мишки', sub: 'Плюшевая коллекция', theme: ['#8a5a3a', '#2a1a14'], items: [126,127,128,129,130,131,132,133,134,135,136,33,14,52,12,34,58], cover: [133,134,136] },
+  { id: 'winter', rtp: .94, price: 49, name: 'Зимний', sub: 'Тепло и уют', theme: ['#2f6fa8', '#0f2036'], items: [87,99,100,103,106,107,116,119,121,122,123,124,79,69,88,105,73,65,97,64], cover: [124,87,79] },
+  { id: 'night', rtp: .93, price: 89, name: 'Ночной', sub: 'Мистика и магия', theme: ['#6a3fb5', '#1a0f33'], items: [38,81,92,93,94,95,96,97,109,110,111,112,113,114,115,126,152,153,76,37,14,66], cover: [110,113,96] },
+  { id: 'love', rtp: .93, price: 149, name: 'Любовь', sub: 'Для самых близких', theme: ['#b04a78', '#2e1020'], items: [5,24,32,34,40,47,49,57,60,66,82,83,125,23,7,119,33,134,48,84,43,35], cover: [125,24,40] },
+  { id: 'lux', rtp: .92, price: 399, name: 'Люкс', sub: 'Дорого и статусно', theme: ['#b58a3c', '#2a1f0c'], items: [15,16,68,31,7,23,29,30,11,59,67,70,4,35,41,143,142,140,26,75,139,10,19], cover: [16,68,15] },
+  { id: 'legend', rtp: .91, price: 999, name: 'Легенды', sub: 'Только топ', theme: ['#d6a64b', '#241a08'], items: [15,16,68,31,6,1,0,3,5,54,41,29,30,32,10,8,139,150,7,23,11,59,25,26], cover: [15,31,1] }
 ];
+const EMPTY = { empty: true, i: -1, id: 'empty', name: 'Пусто', rar: 'common', price: 0 };
+/* Шансы — настоящие: именно эти p используются при розыгрыше.
+   Платные кейсы: p ∝ цена^(−gamma), цена кейса = средний выигрыш / RTP — дороже подарок → реже выпадает.
+   Ежедневный: 99% — пусто, оставшийся 1% делится между подарками, чем дороже — тем на порядки реже. */
+const DAILY_GIFT_P = .01, DAILY_GAMMA = 3.6;
 const CASES = CASE_DEFS.map(c => {
-  const gamma = 1.12, items = c.items.map(i => G[i]);
-  const w = items.map(g => Math.pow(g.price, -gamma)), sw = w.reduce((a, b) => a + b, 0);
-  const drops = items.map((g, k) => ({ g, p: w[k] / sw }));
+  const items = c.items.map(i => G[i]);
+  let drops, price, rtp;
+  if (c.free) {
+    const w = items.map(g => Math.pow(g.price / 8, -DAILY_GAMMA)), sw = w.reduce((a, b) => a + b, 0);
+    drops = items.map((g, k) => ({ g, p: DAILY_GIFT_P * w[k] / sw })); price = 0; rtp = 0;
+    drops.sort((a, b) => b.g.price - a.g.price); drops.unshift({ g: EMPTY, p: 1 - DAILY_GIFT_P });
+  } else {
+    /* подбираем показатель gamma так, чтобы возврат игроку (RTP) был ровно целевым при заданной цене кейса */
+    const evAt = gm => { const w = items.map(g => Math.pow(g.price, -gm)), sw = w.reduce((a, b) => a + b, 0); return items.reduce((a, g, k) => a + g.price * w[k] / sw, 0); };
+    let lo = 0, hi = 8; for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (evAt(m) > c.rtp * c.price) lo = m; else hi = m; }
+    const gm = (lo + hi) / 2, w = items.map(g => Math.pow(g.price, -gm)), sw = w.reduce((a, b) => a + b, 0);
+    drops = items.map((g, k) => ({ g, p: w[k] / sw })); price = c.price;
+    const ev0 = drops.reduce((a, d) => a + d.p * d.g.price, 0); rtp = ev0 / price;
+    drops.sort((a, b) => b.g.price - a.g.price);
+  }
   const ev = drops.reduce((a, d) => a + d.p * d.g.price, 0);
-  let price = c.free ? 0 : Math.max(19, Math.round(ev / 0.93 / 10) * 10 - 1);
-  drops.sort((a, b) => b.g.price - a.g.price);
-  return Object.assign({}, c, { drops, price, ev });
+  return Object.assign({}, c, { drops, price, ev, rtp });
 });
+/* красивый вывод шанса: 99% / 12,5% / 0,0000000100% */
+const pctFmt = p => { const v = p * 100; if (v >= 10) return fmt(v, 0); if (v >= 1) return fmt(v, 1); if (v >= .01) return fmt(v, 2); const s = v.toFixed(10).replace(/0+$/, ''); return s === '0.' || s === '0' ? '<0,0000000001' : s.replace('.', ','); };
 
 /* ---------- Прочее ---------- */
 const FAKE_NAMES = ['esli52','Sergeevna','mishka_k','darkfox','Ilyuha','nastya.v','Vlad_UA','kirill777','bearlover','Maks','alina_s','Tёма','roma_top','sunny','ghost_74','Oleg','Katya','z0mbie'];

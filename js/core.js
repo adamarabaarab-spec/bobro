@@ -33,7 +33,7 @@ function avatarHTML(cls = '') {
 /* ---------- Состояние ---------- */
 const KEY = 'upbaer_demo_v1';
 const defState = () => ({ bal: 1000, inv: [], hist: [], xp: 0, uid: 1, stats: { cases: 0, spins: 0, best: 0, rounds: 0 },
-  daily: { last: '', streak: 0 }, tasks: {}, farm: { t: Date.now(), lvl: 1 }, promo: [], wheel: 0, free: 0, vip: 0, sound: true, haptic: true, refs: 0 });
+  daily: { last: '', streak: 0 }, tasks: {}, farm: { t: Date.now(), lvl: 1 }, promo: [], wheel: 0, free: 0, vip: 0, sound: true, haptic: true, refs: 0, rl: [] });
 let S;
 try { S = Object.assign(defState(), JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { S = defState(); }
 let _sv; function save() { clearTimeout(_sv); _sv = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }, 150); }
@@ -64,23 +64,64 @@ function sellItem(u) {
 const invValue = () => S.inv.reduce((a, it) => a + G[it.g].price, 0);
 
 /* ---------- Звук / вибро ---------- */
-let _ac;
+/* Контекст создаётся при первом касании; короткие «щелчки» заранее сгенерированы в буферах — без лагов. */
+let _ac, _bufs, _lastTick = 0;
+function ac() {
+  if (!S.sound) return null;
+  if (!_ac) { try { _ac = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' }); makeBufs(); } catch (e) { return null; } }
+  if (_ac.state === 'suspended') _ac.resume().catch(() => {});
+  return _ac;
+}
+function makeBufs() {
+  const sr = _ac.sampleRate, mk = (len, fn) => { const b = _ac.createBuffer(1, Math.floor(sr * len), sr), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = fn(i / sr); return b; };
+  const TP = 2 * Math.PI;
+  _bufs = {
+    /* зубец трещотки: сухой щелчок + короткий «стук собачки» */
+    rat: [0, 1, 2].map(k => mk(.035, t => ((Math.random() * 2 - 1) * Math.exp(-t * 520) * .55 + Math.sin(TP * (1700 + k * 260) * t) * Math.exp(-t * 300) * .6 + Math.sin(TP * (420 + k * 40) * t) * Math.exp(-t * 170) * .55))),
+    tick: mk(.03, t => Math.sin(TP * 1250 * t) * Math.exp(-t * 230) * .7 + (Math.random() * 2 - 1) * Math.exp(-t * 600) * .25),
+    click: mk(.04, t => Math.sin(TP * 700 * t) * Math.exp(-t * 130) * .6)
+  };
+}
+document.addEventListener('pointerdown', () => { if (S.sound) ac(); }, { capture: true, passive: true });
+function playBuf(buf, when = 0, vol = .5, rate = 1) {
+  const a = ac(); if (!a || !buf) return;
+  const s = a.createBufferSource(), g = a.createGain(); s.buffer = buf; s.playbackRate.value = rate; g.gain.value = vol; s.connect(g); g.connect(a.destination); s.start(a.currentTime + Math.max(0, when));
+}
 function tone(f, d = .06, type = 'sine', v = .035, when = 0) {
-  if (!S.sound) return;
-  try {
-    _ac = _ac || new (window.AudioContext || window.webkitAudioContext)();
-    const t = _ac.currentTime + when, o = _ac.createOscillator(), g = _ac.createGain();
-    o.type = type; o.frequency.value = f; g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.0001, t + d);
-    o.connect(g); g.connect(_ac.destination); o.start(t); o.stop(t + d + .02);
-  } catch (e) {}
+  const a = ac(); if (!a) return;
+  try { const t = a.currentTime + when, o = a.createOscillator(), g = a.createGain(); o.type = type; o.frequency.value = f; g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.0001, t + d); o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + d + .02); } catch (e) {}
 }
 const sfx = {
-  tick: () => tone(1100, .03, 'triangle', .028), click: () => tone(640, .05, 'sine', .03),
+  tick: () => { const n = performance.now(); if (n - _lastTick < 16) return; _lastTick = n; ac() && _bufs && playBuf(_bufs.tick, 0, .55, .95 + Math.random() * .1); },
+  /* зубец трещотки (when — секунды вперёд, для точной раскладки внутри кадра) */
+  ratchet: (when = 0, vol = .6, rate = 1) => { if (ac() && _bufs) playBuf(_bufs.rat[(Math.random() * 3) | 0], when, vol, rate * (.97 + Math.random() * .06)); },
+  click: () => { ac() && _bufs && playBuf(_bufs.click, 0, .4); },
   drop: () => tone(180, .09, 'sine', .05), pop: () => tone(760, .07, 'triangle', .03),
   win: () => [523, 659, 784].forEach((f, i) => tone(f, .2, 'sine', .045, i * .07)),
   big: () => [523, 659, 784, 1046, 1318].forEach((f, i) => tone(f, .35, 'sine', .05, i * .09)),
   err: () => tone(160, .14, 'sawtooth', .025), lose: () => tone(220, .25, 'sine', .04)
 };
+
+/* кубическая кривая как в CSS transition-timing-function — чтобы звук совпадал с анимацией секунда в секунду */
+function cubicBezier(x1, y1, x2, y2) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx, cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const sx = t => ((ax * t + bx) * t + cx) * t, sy = t => ((ay * t + by) * t + cy) * t;
+  return x => {
+    if (x <= 0) return 0; if (x >= 1) return 1; let lo = 0, hi = 1, t = x;
+    for (let i = 0; i < 22; i++) { if (sx(t) < x) lo = t; else hi = t; t = (lo + hi) / 2; }
+    return sy(t);
+  };
+}
+/* Трещотка: value(k) = from + (to-from)*ease(k); каждый пройденный «зубец» (целое значение) — щелчок. */
+function runRatchet(dur, ease, from, to, { vol = .6, maxPerFrame = 5, onTooth } = {}) {
+  const t0 = performance.now(); let prevV = Math.floor(from), prevT = t0, dead = false, raf = 0;
+  const f = now => {
+    if (dead) return; const k = Math.min(1, (now - t0) / dur), v = from + (to - from) * ease(k), cur = Math.floor(v), n = Math.abs(cur - prevV), fd = Math.max(8, Math.min(40, now - prevT)) / 1000;
+    if (n > 0) { const c = Math.min(n, maxPerFrame); for (let i = 0; i < c; i++) sfx.ratchet(i / c * fd, vol); onTooth && onTooth(cur); }
+    prevV = cur; prevT = now; if (k < 1) raf = requestAnimationFrame(f);
+  };
+  raf = requestAnimationFrame(f); return () => { dead = true; cancelAnimationFrame(raf); };
+}
 function hap(kind = 'light') {
   if (!S.haptic) return;
   try {

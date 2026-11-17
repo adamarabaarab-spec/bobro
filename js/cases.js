@@ -1,6 +1,6 @@
 /* ============ КЕЙСЫ ============ */
 const Cases = (() => {
-  const DAY = 86400000, W = 104, CW = 94;
+  const DAY = 86400000, W = 104, CW = 94, EASE = cubicBezier(.08, .6, .1, 1);
   const priceHTML = c => c.free ? 'Бесплатно' : `${COIN}${fmt(c.price, 0)}`;
   function cardHTML(c, big, style = '') {
     const art = `<div class="cc-art">${c.cover.map(i => giftImg(i)).join('')}</div>`;
@@ -19,24 +19,27 @@ const Cases = (() => {
       <div class="cgrid">${rest.map(c => cardHTML(c)).join('')}</div></div>`;
   }
   const weighted = c => { let r = Math.random(); for (const d of c.drops) { r -= d.p; if (r <= 0) return d.g; } return c.drops[c.drops.length - 1].g; };
-  const cellHTML = g => `<div class="cell r-${g.rar}"><div class="gi">${giftImg(g.i)}</div><div class="cp">${COIN}${fmt(g.price, 0)}</div></div>`;
+  const EMPTY_ART = '<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="15" fill="none" stroke="currentColor" stroke-width="3" opacity=".55"/><path d="M13.5 34.5L34.5 13.5" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity=".55"/></svg>';
+  const cellHTML = g => g.empty ? `<div class="cell empty"><div class="gi">${EMPTY_ART}</div><div class="cp">Пусто</div></div>` : `<div class="cell r-${g.rar}"><div class="gi">${giftImg(g.i)}</div><div class="cp">${COIN}${fmt(g.price, 0)}</div></div>`;
+  /* для красоты ленты заполняем «пустыми» и подарками примерно поровну; выигрыш — всегда по настоящим шансам */
+  const filler = c => { if (!c.free) return weighted(c); if (Math.random() < .5) return EMPTY; const gs = c.drops.filter(d => !d.g.empty); return gs[Math.floor(Math.random() * gs.length)].g; };
 
   function open(id) {
-    const c = CASES.find(x => x.id === id); let demo = false, fast = false, busy = false, arr = [], cur = 0, timer = null, raf = 0;
+    const c = CASES.find(x => x.id === id); let demo = false, fast = false, busy = false, arr = [], cur = 0, timer = null, raf = 0, stopTk = null;
     const body = Sub.open(c.name, `
       <div class="cstage">
-        <div class="cs-head"><div class="gi">${giftImg(c.cover[1])}</div><div><h2>${c.name} кейс</h2><p>${c.sub}</p></div></div>
+        <div class="cs-head"><div class="gi">${giftImg(c.cover[1])}</div><div><h2>${c.name} кейс</h2><p>${c.free ? 'Шанс подарка 1%' : 'RTP ' + fmt(c.rtp * 100, 1) + '%'}</p></div></div>
         <div class="roul"><div class="strip"></div><div class="rmark"></div></div>
         <div class="cs-ctl"><button class="btn gold block" id="goBtn"></button>
           <div class="cs-opt"><label><span class="switch" id="swDemo"></span>Демо-режим</label><label>Быстро<span class="switch" id="swFast"></span></label></div></div>
       </div>
-      <div class="h2">Что может выпасть <small>${c.drops.length} предметов</small></div>
-      <div class="dgrid">${c.drops.map(d => `<div class="dcard r-${d.g.rar}"><span class="dch">${d.p * 100 >= 10 ? fmt(d.p * 100, 0) : fmt(d.p * 100, 1)}%</span><div class="gi">${giftImg(d.g.i)}</div><div class="dn">${esc(d.g.name)}</div><div class="dp">${COIN}${fmt(d.g.price, 0)}</div></div>`).join('')}</div>`,
-      { bg: .72, onClose: () => { clearInterval(timer); cancelAnimationFrame(raf); } });
+      <div class="h2">Что может выпасть <small>${c.drops.filter(d => !d.g.empty).length} предметов</small></div>
+      <div class="dgrid">${c.drops.map(d => d.g.empty ? `<div class="dcard empty"><span class="dch">${pctFmt(d.p)}%</span><div class="gi">${EMPTY_ART}</div><div class="dn">Пусто</div><div class="dp">—</div></div>` : `<div class="dcard r-${d.g.rar}"><span class="dch">${pctFmt(d.p)}%</span><div class="gi">${giftImg(d.g.i)}</div><div class="dn">${esc(d.g.name)}</div><div class="dp">${COIN}${fmt(d.g.price, 0)}</div></div>`).join('')}</div>`,
+      { bg: .72, onClose: () => { clearInterval(timer); cancelAnimationFrame(raf); stopTk && stopTk(); } });
     const strip = $('.strip', body), roul = $('.roul', body), mark = $('.rmark', body), btn = $('#goBtn', body);
     const cx = () => roul.clientWidth / 2;
     const xAt = (i, off = 0) => cx() - (i * W + CW / 2 + off);
-    arr = Array.from({ length: 30 }, () => weighted(c)); cur = 15;
+    arr = Array.from({ length: 30 }, () => filler(c)); cur = 15;
     const paint = () => { strip.innerHTML = arr.map(cellHTML).join(''); };
     paint(); strip.style.transform = `translateX(${xAt(cur)}px)`;
     window.addEventListener('resize', () => { if (!busy) strip.style.transform = `translateX(${xAt(cur)}px)`; });
@@ -59,28 +62,31 @@ const Cases = (() => {
       if (!demo) { if (c.free) S.free = Date.now(); else addBal(-c.price); S.stats.cases++; addXP(Math.ceil(c.price / 10) + 2); save(); }
       const win = weighted(c), WIN = 5 + 50 + Math.floor(Math.random() * 4);
       const keep = arr.slice(cur - 5, cur + 6), na = keep.slice();
-      while (na.length < WIN + 8) na.push(weighted(c)); na[WIN] = win; arr = na; paint();
+      while (na.length < WIN + 8) na.push(filler(c)); na[WIN] = win; arr = na; paint();
       strip.style.transition = 'none'; strip.style.transform = `translateX(${xAt(5)}px)`; void strip.offsetWidth;
       const dur = fast ? 2.4 : 6.4, off = rnd(-CW * .36, CW * .36);
       strip.style.transition = `transform ${dur}s cubic-bezier(.08,.6,.1,1)`; strip.style.transform = `translateX(${xAt(WIN, off)}px)`;
-      let last = -1; const tick = () => {
-        const m = new DOMMatrix(getComputedStyle(strip).transform).m41, idx = Math.floor((cx() - m) / W);
-        if (idx !== last) { last = idx; sfx.tick(); hap('select'); mark.classList.add('tk'); setTimeout(() => mark.classList.remove('tk'), 70); }
-        raf = requestAnimationFrame(tick);
-      }; tick();
-      await sleep(dur * 1000 + 120); cancelAnimationFrame(raf); cur = WIN;
+      /* щелчок каждый раз, когда под маркером проходит новая карточка — по той же кривой, что и анимация */
+      const p0 = 5 + CW / 2 / W, p1 = WIN + CW / 2 / W + off / W;
+      stopTk = runRatchet(dur * 1000, EASE, p0, p1, { vol: .5, maxPerFrame: 3, onTooth: () => { hap('select'); mark.classList.add('tk'); setTimeout(() => mark.classList.remove('tk'), 70); } });
+      await sleep(dur * 1000 + 120); stopTk && stopTk(); cur = WIN;
       $$('.cell', strip).forEach((el, i) => el.classList.add(i === WIN ? 'won' : 'dim'));
-      hap(win.rar === 'legend' || win.rar === 'epic' ? 'heavy' : 'medium'); (win.rar === 'legend' || win.rar === 'epic') ? sfx.big() : sfx.win();
-      if (!demo) { giveItem(win.i); logH('case', `${c.name}: «${win.name}»`, win.price); }
+      if (win.empty) { hap('light'); sfx.lose(); if (!demo) logH('case', `${c.name}: пусто`, 0); }
+      else { hap(win.rar === 'legend' || win.rar === 'epic' ? 'heavy' : 'medium'); (win.rar === 'legend' || win.rar === 'epic') ? sfx.big() : sfx.win(); if (!demo) { giveItem(win.i); logH('case', `${c.name}: «${win.name}»`, win.price); } }
       await sleep(650); showResult(win);
     };
 
     function showResult(g) {
+      if (g.empty) {
+        const w = pop(`<div class="res r-lose"><div class="res-t">${demo ? 'Демо · ' : ''}Пусто</div><div class="res-g emp">${EMPTY_ART}</div><h3>Не повезло</h3><div class="muted" style="font-size:13px;margin-top:4px">Шанс подарка — 1%. Попробуй завтра.</div>
+          <div class="btns"><button class="btn vio block" data-close>Ок</button></div></div>`, { type: 'modal' });
+        w.locked = false; w.onclose = () => { busy = false; $$('.cell', strip).forEach(el => el.classList.remove('won', 'dim')); label(); }; return;
+      }
       const w = pop(`<div class="res r-${g.rar}"><div class="res-t">${demo ? 'Демо · ' : ''}${RAR[g.rar].n}</div><div class="res-g">${giftImg(g.i)}</div><h3>${esc(g.name)}</h3>
         <div class="pr">${COIN}${fmt(g.price, 0)}</div>
         <div class="btns">${demo ? '<button class="btn gold block" data-close>Круто!</button>' : `<button class="btn gold block" id="sellB">Продать за ${COIN}${fmt(g.price, 0)}</button><button class="btn ghost block" data-close>В инвентарь</button>`}</div></div>`, { type: 'modal' });
       w.locked = false;
-      const sb = $('#sellB', w); if (sb) sb.onclick = () => { sellItem(S.inv[S.inv.length - 1].u); hap('success'); toast('Продано за ' + fmt(g.price, 0) + ' ' + CFG.CURRENCY); w.close(); };
+      const sb = $('#sellB', w); if (sb) sb.onclick = () => Verify.sell(S.inv[S.inv.length - 1].u, () => w.close());
       w.onclose = () => { busy = false; $$('.cell', strip).forEach(el => el.classList.remove('won', 'dim')); label(); };
     }
   }

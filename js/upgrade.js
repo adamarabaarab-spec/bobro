@@ -3,7 +3,7 @@
    Шанс = ставка / цена цели × 0.95 (макс. 95%). Попал в золотую зону — цель твоя. */
 const Upgrade = (() => {
   const EDGE = .95, MULTS = [1.5, 2, 3, 5, 10, 25], STAKES = [0, 50, 200, 1000];
-  const R = 100, CIRC = 2 * Math.PI * R;
+  const R = 100, CIRC = 2 * Math.PI * R, UEASE = cubicBezier(.12, .6, .06, 1);
   const SORTED = G.slice().sort((a, b) => a.price - b.price);
 
   function open() {
@@ -63,7 +63,7 @@ const Upgrade = (() => {
     }
     function paintPick() {
       if (tab === 'mine') {
-        const inv = S.inv.slice().sort((a, b) => G[b.g].price - G[a.g].price);
+        const inv = S.inv.filter(it => !it.st).slice().sort((a, b) => G[b.g].price - G[a.g].price);
         pick_.innerHTML = `<div class="up-stake"><span>Баланс</span><div class="chips">${STAKES.map(v => `<button data-s="${v}" class="${stake === v ? 'on' : ''}">${v || '0'}</button>`).join('')}<button data-s="max" class="${stake && stake === Math.floor(S.bal) ? 'on' : ''}">Макс</button></div></div>
           ${inv.length ? `<div class="up-grid">${inv.map(it => { const g = G[it.g]; return `<button class="up-it r-${g.rar}${sel.has(it.u) ? ' on' : ''}" data-u="${it.u}"><div class="gi">${giftImg(it.g)}</div><div class="dn">${esc(g.name)}</div><div class="dp">${COIN}${fmt(g.price, 0)}</div><i class="ck"></i></button>`; }).join('')}</div>`
             : `<div class="empty">${giftImg(136)}Пусто</div>`}`;
@@ -92,8 +92,9 @@ const Upgrade = (() => {
       S.stats.rounds++; addXP(Math.max(1, Math.round(s / 20))); hap('medium');
       const roll = Math.random(), win = roll < c, fin = ang + 360 * 6 + (roll * 360 - (ang % 360) + 360) % 360, dur = 5400;
       stage.classList.add('spin'); needle.style.transition = `transform ${dur}ms cubic-bezier(.12,.6,.06,1)`; needle.style.transform = `rotate(${fin}deg)`;
-      const N = 46; for (let i = 1; i <= N; i++) setTimeout(() => alive && sfx.tick(), dur * (1 - Math.pow(1 - i / N, 1 / 3)) * .96);
-      await sleep(dur + 150); if (!alive) return;
+      /* трещотка: щелчок на каждый зубец кольца (через 5°) — только пока стрелка пролетает */
+      const stopTk = runRatchet(dur, UEASE, ang / 5, fin / 5, { vol: .42, maxPerFrame: 5, onTooth: () => hap('select') });
+      await sleep(dur + 100); stopTk(); if (!alive) return;
       ang = fin % 360; needle.style.transition = 'none'; needle.style.transform = `rotate(${ang}deg)`;
       stage.classList.remove('spin'); stage.classList.add(win ? 'won' : 'lost'); setTimeout(() => stage.classList.remove('won', 'lost'), 1800);
       if (win) { giveItem(tgt.i); logH('upgrade', `Апгрейд: «${tgt.name}»`, tgt.price - s); sfx.big(); hap('success'); }
@@ -102,7 +103,7 @@ const Upgrade = (() => {
       const m = pop(win
         ? `<div class="res r-${tgt.rar}"><div class="res-t">Успех</div><div class="res-g">${giftImg(tgt.i)}</div><h3>${esc(tgt.name)}</h3><div class="pr">${COIN}${fmt(tgt.price, 0)}</div><div class="btns"><button class="btn gold block" id="upSell">Продать за ${COIN}${fmt(tgt.price, 0)}</button><button class="btn ghost block" data-close>В инвентарь</button></div></div>`
         : `<div class="res r-lose"><div class="res-t">Не повезло</div><div class="up-lost">${used.slice(0, 4).map(it => giftImg(it.g)).join('') || COIN}</div><div class="pr" style="color:var(--red)">−${COIN}${fmt(s, 0)}</div><div class="btns"><button class="btn vio block" data-close>Ещё раз</button></div></div>`, { type: 'modal' });
-      const sb = $('#upSell', m); if (sb) sb.onclick = () => { const it = S.inv[S.inv.length - 1]; if (it) { sellItem(it.u); hap('success'); toast('Продано за ' + fmt(tgt.price, 0) + ' ' + CFG.CURRENCY); } m.close(); if (alive) { paintStage(); paintPick(); } };
+      const sb = $('#upSell', m); if (sb) sb.onclick = () => { const it = S.inv[S.inv.length - 1]; m.close(); if (it) Verify.sell(it.u, () => { if (alive) { paintStage(); paintPick(); } }); };
     };
   }
   return { open };

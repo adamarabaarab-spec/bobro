@@ -12,7 +12,7 @@ const Earn = (() => {
     { id: 'cases', ic: 105, t: 'Открой 5 кейсов', s: '', r: 150, target: 5, get: () => S.stats.cases, go: 'cases' },
     { id: 'rounds', ic: 15, t: 'Сыграй 10 раундов', s: '', r: 120, target: 10, get: () => S.stats.rounds, go: 'home' },
     { id: 'inv', ic: 16, t: 'Собери инвентарь на 500', s: '', r: 200, target: 500, get: () => invValue(), go: 'cases' },
-    { id: 'friends', ic: 33, t: 'Пригласи 3 друзей', s: '', r: 300, target: 3, get: () => S.refs, go: null }
+    { id: 'friends', ic: 33, t: 'Пригласи 3 друзей', s: '', r: 300, target: 3, get: () => (S.rl || []).length, go: null }
   ];
 
   function earnHTML() {
@@ -31,11 +31,7 @@ const Earn = (() => {
       <div class="list" id="tasks">${TASKS.map(taskHTML).join('')}</div>
 
       <div class="h2">Друзья</div>
-      <div class="card ref"><b style="font-size:15px">Получай ${CFG.CURRENCY} за каждого друга</b>
-        <div class="muted" style="font-size:12.5px;margin-top:4px;line-height:1.45">+100 ${CFG.CURRENCY} тебе и другу сразу и 5% от его активности.</div>
-        <div class="lnk">${esc(refLink())}</div>
-        <div class="row"><button class="btn ghost sp sm" id="refCopy">Копировать</button><button class="btn vio sp sm" id="refShare">Пригласить</button></div>
-        <div class="row" style="margin-top:12px;font-size:12.5px"><span class="muted">Приглашено: <b style="color:var(--ink)">${S.refs}</b></span><span class="sp"></span><span class="muted">Заработано: <b class="gold">${fmt(S.refs * 100, 0)}</b></span></div></div></div>`;
+      ${Verify.friendsHTML(refLink())}</div>`;
   }
   function taskHTML(t) {
     const done = S.tasks[t.id] === 'done';
@@ -57,21 +53,26 @@ const Earn = (() => {
       else if (b.dataset.link) { openTG(CFG.CHANNEL); toast('Проверяем подписку…'); setTimeout(() => { S.tasks.sub = 'ready'; save(); if (cur === 'earn') renderTab(false); }, 3500); }
       else if (b.dataset.goto) { if (b.dataset.goto === 'share') $('#refShare', v).click(); else go(b.dataset.goto); }
     });
+    $('#vfRules2', v).onclick = () => Verify.rules(); Verify.sync().then(() => {});
     $('#refCopy', v).onclick = () => { copyText(refLink()); hap('success'); toast('Ссылка скопирована'); };
     $('#refShare', v).onclick = () => openTG(`https://t.me/share/url?url=${encodeURIComponent(refLink())}&text=${encodeURIComponent('Залетай в UpBaer — открывай кейсы с подарками и играй 🐻🎁')}`);
   }
   const giftItemFor = gi => { giveItem(gi); logH('gift', 'Подарок: «' + G[gi].name + '»', G[gi].price); return gi; };
 
   /* ---- Бонусы ---- */
-  const PRIZES = [10, 25, 15, 50, 20, 100, 30, 250], PW = [22, 16, 20, 9, 18, 4, 10, 1];
-  function wheelBG() { const cols = ['#3b2f8f', '#26205a']; let s = ''; PRIZES.forEach((_, i) => { s += `${i === 7 ? '#8a6a2b' : cols[i % 2]} ${i * 45}deg ${(i + 1) * 45}deg${i < 7 ? ',' : ''}`; }); return `conic-gradient(${s})`; }
+  /* призы от 0,30 до 5 USD: чем дороже — тем реже. Порядок секторов — как на баннере (белый / розовый / белый / фиолетовый) */
+  const PRIZES = [0.3, 1, 0.5, 2, 0.75, 5, 1.5, 3], PW = [34, 10, 26, 3.5, 18, .7, 6, 1.8];
+  const SEC = ['#fff', '#ff5fb0', '#fff', '#7c4dff'], WEASE = cubicBezier(.12, .7, .1, 1);
+  const wheelBG = () => `conic-gradient(${PRIZES.map((_, i) => `${SEC[i % 4]} ${i * 45}deg ${(i + 1) * 45}deg`).join(',')})`;
+  const prizeTxt = p => '$' + (p % 1 ? String(p) : p);
+  const wheelHTML = () => `<div class="wheelw"><div class="wheel-pt"></div><div class="wheel" id="wheel" style="background:${wheelBG()}">${PRIZES.map((p, i) => `<span class="wl" style="transform:rotate(${i * 45 + 22.5}deg)"><b style="color:${i % 4 === 0 || i % 4 === 2 ? '#3a0f63' : '#fff'}">${prizeTxt(p)}</b></span>`).join('')}</div><div class="wheel-hub">${COIN}</div></div>`;
   function bonusHTML() {
     const lv = vipLevel(), nx = VIP[lv + 1], cur = VIP[lv], pct = nx ? (S.xp - cur.xp) / (nx.xp - cur.xp) * 100 : 100;
     const pend = VIP.slice(S.vip + 1, lv + 1).reduce((a, v) => a + v.reward, 0), wl = DAY - (Date.now() - S.wheel);
     return `<div class="page">
       <div class="cgrid">${Cases.cardHTML(CASES[0], true)}</div>
       <div class="h2">Колесо бонусов <small>раз в сутки</small></div>
-      <div class="card" style="padding:22px 16px 16px"><div class="wheelw"><div class="wheel-pt"></div><div class="wheel" id="wheel" style="background:${wheelBG()}">${PRIZES.map((p, i) => `<span style="position:absolute;left:50%;top:50%;width:0;height:0;transform:rotate(${i * 45 + 22.5}deg)"><b style="position:absolute;left:-30px;top:-118px;width:60px;text-align:center;font-family:var(--disp);font-size:${p >= 100 ? 15 : 14}px;color:${i === 7 ? '#ffe9b0' : '#e8e2ff'}">${p}</b></span>`).join('')}</div><div class="wheel-hub"><img src="${G[136].img}" alt=""></div></div>
+      <div class="card wcard">${wheelHTML()}
         <button class="btn gold block" id="wheelB" style="margin-top:14px" ${wl > 0 ? 'disabled' : ''}>${wl > 0 ? 'Следующий спин через ' + timeLeft(wl) : 'Крутить колесо'}</button></div>
 
       <div class="h2">Уровень берлоги</div>
@@ -90,9 +91,9 @@ const Earn = (() => {
     wb.onclick = async () => {
       if (Date.now() - S.wheel < DAY) return; wb.disabled = true; S.wheel = Date.now(); save();
       let r = Math.random() * PW.reduce((a, b) => a + b, 0), idx = 0; for (; idx < PW.length; idx++) { r -= PW[idx]; if (r < 0) break; } idx = Math.min(idx, 7);
-      const rot = 360 * 6 + (360 - (idx * 45 + 22.5)) + rnd(-15, 15); wheel.style.transform = `rotate(${rot}deg)`;
-      for (let i = 0; i < 28; i++) { setTimeout(() => sfx.tick(), i * i * 6.2); }
-      await sleep(5200); addBal(PRIZES[idx]); logH('wheel', 'Колесо бонусов', PRIZES[idx]); hap('success'); sfx.big(); toast('+' + PRIZES[idx] + ' ' + CFG.CURRENCY); wb.textContent = 'Следующий спин через 24:00:00';
+      const rot = 360 * 6 + (360 - (idx * 45 + 22.5)) + rnd(-15, 15); S.wheelSpins = (S.wheelSpins || 0) + 1; save(); wheel.style.transform = `rotate(${rot}deg)`;
+      const stop = runRatchet(5000, WEASE, 0, rot / 45, { vol: .55, maxPerFrame: 3, onTooth: () => hap('select') });
+      await sleep(5100); stop(); addBal(PRIZES[idx]); logH('wheel', 'Колесо бонусов', PRIZES[idx]); hap('success'); sfx.big(); toast('+' + fmt(PRIZES[idx]) + ' ' + CFG.CURRENCY); wb.textContent = 'Следующий спин через 24:00:00';
     };
     const vb = $('#vipB', v); if (vb) vb.onclick = () => { const lv = vipLevel(), p = VIP.slice(S.vip + 1, lv + 1).reduce((a, x) => a + x.reward, 0); S.vip = lv; addBal(p); logH('vip', 'Награда за уровень', p); hap('success'); sfx.big(); toast('+' + fmt(p, 0) + ' ' + CFG.CURRENCY); renderTab(false); };
     $('#promoB', v).onclick = () => {
