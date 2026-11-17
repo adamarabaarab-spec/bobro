@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0a0812">
+<title>UpBaer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+<div id="bg-gifts"></div>
+<div class="glow g1"></div><div class="glow g2"></div>
+
+<div id="app">
+  <header id="top">
+    <div class="logo"><img src="assets/logo.png" alt="UpBaer" draggable="false"></div>
+    <div class="top-r">
+      <button class="bal" id="balBtn" aria-label="Баланс"><span class="coinw"></span><b class="balV">0</b><small class="cur">USD</small><i class="plus">+</i></button>
+      <button class="ava" id="avaBtn" aria-label="Профиль"></button>
+    </div>
+  </header>
+  <main id="view"></main>
+  <nav id="nav">
+    <i class="nav-ind"></i>
+    <button data-tab="home">Игры</button>
+    <button data-tab="cases">Кейсы</button>
+    <button data-tab="earn">Заработок</button>
+    <button data-tab="bonus">Бонусы</button>
+  </nav>
+</div>
+
+<div id="sub"></div>
+<div id="overlay"></div>
+<div id="toasts"></div>
+
+<script src="js/data.js"></script>
+<script src="js/core.js"></script>
+<script src="js/bg.js"></script>
+<script src="js/slot-engine.js"></script>
+<script src="js/cases.js"></script>
+<script src="js/games.js"></script>
+<script src="js/crash.js"></script>
+<script src="js/arena.js"></script>
+<script src="js/upgrade.js"></script>
+<script src="js/earn.js"></script>
+<script src="js/profile.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
