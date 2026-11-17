@@ -49,14 +49,14 @@ function renderBal(animate) {
   const step = t => { const k = Math.min(1, (t - t0) / dur), v = from + (to - from) * (1 - Math.pow(1 - k, 3)); $$('.balV').forEach(e => e.textContent = fmt(k < 1 ? v : to)); if (k < 1) requestAnimationFrame(step); };
   requestAnimationFrame(step);
 }
-function addBal(d, animate = true) { S.bal = Math.round((S.bal + d) * 100) / 100; if (S.bal < 0) S.bal = 0; save(); renderBal(animate); }
+function addBal(d, animate = true) { if (d < 0 && window.Raffle) Raffle.spent(-d); S.bal = Math.round((S.bal + d) * 100) / 100; if (S.bal < 0) S.bal = 0; save(); renderBal(animate); }
 function canPay(n) { if (S.bal + 1e-9 >= n) return true; hap('error'); toast('Недостаточно ' + CFG.CURRENCY); sfx.err(); return false; }
 function addXP(n) { S.xp += n; save(); }
 function vipLevel() { let l = 0; VIP.forEach((v, i) => { if (S.xp >= v.xp) l = i; }); return l; }
 
 /* ---------- Инвентарь / история ---------- */
 function logH(icon, text, amt) { S.hist.unshift({ t: Date.now(), icon, text, amt: amt || 0 }); S.hist.length = Math.min(S.hist.length, 60); save(); }
-function giveItem(gi) { const it = { u: S.uid++, g: gi, t: Date.now() }; S.inv.push(it); if (G[gi].price > S.stats.best) S.stats.best = G[gi].price; save(); return it; }
+function giveItem(gi, free = false) { const it = { u: S.uid++, g: gi, t: Date.now() }; if (free) it.free = 1; S.inv.push(it); if (G[gi].price > S.stats.best) S.stats.best = G[gi].price; save(); return it; }
 function sellItem(u) {
   const k = S.inv.findIndex(x => x.u === u); if (k < 0) return 0;
   const g = G[S.inv[k].g]; S.inv.splice(k, 1); addBal(g.price); logH('sell', 'Продан «' + g.name + '»', g.price); return g.price;
@@ -76,10 +76,11 @@ function makeBufs() {
   const sr = _ac.sampleRate, mk = (len, fn) => { const b = _ac.createBuffer(1, Math.floor(sr * len), sr), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = fn(i / sr); return b; };
   const TP = 2 * Math.PI;
   _bufs = {
-    /* зубец трещотки: сухой щелчок + короткий «стук собачки» */
-    rat: [0, 1, 2].map(k => mk(.035, t => ((Math.random() * 2 - 1) * Math.exp(-t * 520) * .55 + Math.sin(TP * (1700 + k * 260) * t) * Math.exp(-t * 300) * .6 + Math.sin(TP * (420 + k * 40) * t) * Math.exp(-t * 170) * .55))),
-    tick: mk(.03, t => Math.sin(TP * 1250 * t) * Math.exp(-t * 230) * .7 + (Math.random() * 2 - 1) * Math.exp(-t * 600) * .25),
-    click: mk(.04, t => Math.sin(TP * 700 * t) * Math.exp(-t * 130) * .6)
+    /* зубец трещотки: мягкий «тук» — низкий округлый щелчок без шума, с плавной атакой */
+    rat: [0, 1, 2].map(k => mk(.04, t => Math.min(1, t / .003) * Math.sin(TP * (300 + k * 25) * t) * Math.exp(-t * 85) * .7)),
+    tick: mk(.035, t => Math.min(1, t / .002) * Math.sin(TP * 980 * t) * Math.exp(-t * 170) * .6),
+    click: mk(.045, t => Math.min(1, t / .002) * (Math.sin(TP * 620 * t) * Math.exp(-t * 110) * .55)),
+    noise: mk(1, () => Math.random() * 2 - 1)
   };
 }
 document.addEventListener('pointerdown', () => { if (S.sound) ac(); }, { capture: true, passive: true });
@@ -91,11 +92,28 @@ function tone(f, d = .06, type = 'sine', v = .035, when = 0) {
   const a = ac(); if (!a) return;
   try { const t = a.currentTime + when, o = a.createOscillator(), g = a.createGain(); o.type = type; o.frequency.value = f; g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.0001, t + d); o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + d + .02); } catch (e) {}
 }
+function noiseBurst(dur = .2, f0 = 800, f1 = 800, vol = .15, when = 0, q = 1.2, type = 'bandpass') {
+  const a = ac(); if (!a || !_bufs) return;
+  const t = a.currentTime + when, src = a.createBufferSource(), fl = a.createBiquadFilter(), g = a.createGain();
+  src.buffer = _bufs.noise; src.loop = true; fl.type = type; fl.Q.value = q; fl.frequency.setValueAtTime(f0, t); fl.frequency.exponentialRampToValueAtTime(Math.max(40, f1), t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + Math.min(.03, dur * .3)); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  src.connect(fl); fl.connect(g); g.connect(a.destination); src.start(t, Math.random() * .5); src.stop(t + dur + .05);
+}
 const sfx = {
+  /* слоты: «тук» падающей карточки (колонка c), свист барабана, хлопок лопнувшего символа, звон монет */
+  thud: (c = 0, when = 0) => { tone(150 + c * 22, .11, 'sine', .07, when); tone(300 + c * 40, .05, 'triangle', .02, when); },
+  whoosh: (dur = .5, when = 0) => noiseBurst(dur, 400, 2200, .11, when, .9),
+  scat: (i = 0) => { tone(620 + i * 150, .32, 'sine', .055); tone(1240 + i * 300, .26, 'triangle', .02, .03); noiseBurst(.25, 300, 1800, .06, 0, .9); },
+  zap: (i = 0) => [0, 1, 2].forEach(k => tone(480 + i * 70 + k * 240, .1, 'triangle', .035, k * .04)),
+  pah: (when = 0) => { noiseBurst(.09, 2600, 700, .16, when, .8); tone(520, .08, 'triangle', .04, when); },
+  chime: (n = 1, when = 0) => { const b = 523 * Math.pow(1.122, Math.min(8, n - 1)); [b, b * 1.25, b * 1.5].forEach((f, i) => tone(f, .26, 'sine', .04, when + i * .06)); },
+  coins: (n = 8, when = 0) => { for (let i = 0; i < n; i++) { const w = when + i * .055 + Math.random() * .02, f = 1800 + Math.random() * 900; tone(f, .09, 'triangle', .03, w); tone(f * 1.5, .06, 'sine', .015, w + .01); } },
+  reel: (n = 8, gap = .07, when = 0) => { for (let i = 0; i < n; i++) tone(210 + i * 14, .05, 'sine', .035, when + i * gap); },
+
   tick: () => { const n = performance.now(); if (n - _lastTick < 16) return; _lastTick = n; ac() && _bufs && playBuf(_bufs.tick, 0, .55, .95 + Math.random() * .1); },
   /* зубец трещотки (when — секунды вперёд, для точной раскладки внутри кадра) */
   ratchet: (when = 0, vol = .6, rate = 1) => { if (ac() && _bufs) playBuf(_bufs.rat[(Math.random() * 3) | 0], when, vol, rate * (.97 + Math.random() * .06)); },
-  click: () => { ac() && _bufs && playBuf(_bufs.click, 0, .4); },
+  click: () => {},
   drop: () => tone(180, .09, 'sine', .05), pop: () => tone(760, .07, 'triangle', .03),
   win: () => [523, 659, 784].forEach((f, i) => tone(f, .2, 'sine', .045, i * .07)),
   big: () => [523, 659, 784, 1046, 1318].forEach((f, i) => tone(f, .35, 'sine', .05, i * .09)),
@@ -113,11 +131,17 @@ function cubicBezier(x1, y1, x2, y2) {
   };
 }
 /* Трещотка: value(k) = from + (to-from)*ease(k); каждый пройденный «зубец» (целое значение) — щелчок. */
-function runRatchet(dur, ease, from, to, { vol = .6, maxPerFrame = 5, onTooth } = {}) {
-  const t0 = performance.now(); let prevV = Math.floor(from), prevT = t0, dead = false, raf = 0;
+function runRatchet(dur, ease, from, to, { vol = .6, maxPerFrame = 5, onTooth, minGap = 55 } = {}) {
+  const t0 = performance.now(); let prevV = Math.floor(from), prevT = t0, lastS = -1e9, dead = false, raf = 0;
   const f = now => {
-    if (dead) return; const k = Math.min(1, (now - t0) / dur), v = from + (to - from) * ease(k), cur = Math.floor(v), n = Math.abs(cur - prevV), fd = Math.max(8, Math.min(40, now - prevT)) / 1000;
-    if (n > 0) { const c = Math.min(n, maxPerFrame); for (let i = 0; i < c; i++) sfx.ratchet(i / c * fd, vol); onTooth && onTooth(cur); }
+    if (dead) return; const k = Math.min(1, (now - t0) / dur), v = from + (to - from) * ease(k), cur = Math.floor(v), n = Math.abs(cur - prevV);
+    if (n > 0) {
+      /* быстро — реже и тише (иначе «трещит»); медленно — каждый зубец отчётливо */
+      const speed = n / Math.max(8, Math.min(40, now - prevT)) * 1000;          // зубцов в секунду
+      const soft = Math.max(.3, Math.min(1, 1.1 - speed / 110)), fade = Math.min(1, .2 + (now - t0) / 1200);
+      if (now - lastS >= minGap) { sfx.ratchet(0, vol * soft * fade); lastS = now; }
+      onTooth && onTooth(cur);
+    }
     prevV = cur; prevT = now; if (k < 1) raf = requestAnimationFrame(f);
   };
   raf = requestAnimationFrame(f); return () => { dead = true; cancelAnimationFrame(raf); };
@@ -151,7 +175,7 @@ const timeLeft = ms => { ms = Math.max(0, ms); const s = Math.floor(ms / 1000), 
 const dayKey = () => new Date().toISOString().slice(0, 10);
 
 /* delegated press feedback */
-document.addEventListener('pointerdown', e => { const b = e.target.closest('button,.press'); if (b && !b.disabled) sfx.click(); }, { passive: true });
+
 
 /* ---------- Авто-«лайт»: слабые телефоны ---------- */
 (function () {

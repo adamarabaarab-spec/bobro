@@ -31,9 +31,9 @@ const Profile = (() => {
     function inv() {
       const list = S.inv.slice().reverse().filter(it => filter === 'all' || G[it.g].rar === filter);
       const total = invValue(), s = Verify.stats();
-      pb.innerHTML = `<div class="inv-h"><div class="v">Стоимость<b>${COIN}${fmt(total, 0)}</b></div><button class="inv-fr press" id="ifr"><span>Для подарка</span><b>${Math.min(s.free, Verify.NEED)}/${Verify.NEED}</b></button></div>
+      pb.innerHTML = `<div class="inv-h"><div class="v">Стоимость<b>${COIN}${fmt(total, 0)}</b></div><button class="inv-fr press" id="ifr"><span>Для бесплатных</span><b>${Math.min(s.free, Verify.NEED)}/${Verify.NEED}</b></button></div>
         <div class="fl">${[['all', 'Все'], ['common', 'Обычные'], ['rare', 'Редкие'], ['epic', 'Эпические'], ['legend', 'Легендарные']].map(([k, n]) => `<button data-f="${k}" class="${filter === k ? 'on' : ''}">${n}</button>`).join('')}</div>
-        ${list.length ? `<div class="dgrid">${list.map(it => { const g = G[it.g]; return `<button class="dcard r-${g.rar} press" data-u="${it.u}">${it.st === 'review' ? '<span class="dch rv">Проверка</span>' : ''}<div class="gi">${giftImg(g.i)}</div><div class="dn">${esc(g.name)}</div><div class="dp">${COIN}${fmt(g.price, 0)}</div></button>`; }).join('')}</div>`
+        ${list.length ? `<div class="dgrid">${list.map(it => { const g = G[it.g]; return `<button class="dcard r-${g.rar} press" data-u="${it.u}">${it.st === 'review' ? '<span class="dch rv">Вывод</span>' : it.free ? '<span class="dch rv">Бесплатный</span>' : ''}<div class="gi">${giftImg(g.i)}</div><div class="dn">${esc(g.name)}</div><div class="dp">${COIN}${fmt(g.price, 0)}</div></button>`; }).join('')}</div>`
           : `<div class="empty">${giftImg(105)}${S.inv.length ? 'Нет предметов такой редкости' : 'Инвентарь пуст.<br>Открой кейс — подарки появятся здесь.'}</div>`}`;
       $$('[data-f]', pb).forEach(b => b.onclick = () => { filter = b.dataset.f; hap('select'); inv(); });
       $('#ifr', pb).onclick = () => Verify.rules();
@@ -45,7 +45,7 @@ const Profile = (() => {
       const p = pop(`<div class="res r-${g.rar}"><div class="res-t">${RAR[g.rar].n}</div><div class="res-g" style="width:140px;height:140px">${giftImg(g.i)}</div><h3 style="font-size:18px">${esc(g.name)}</h3><div class="pr">${COIN}${fmt(g.price, 0)}</div>
         ${review ? `<div class="vf-wait"><b>Вывод на проверке</b><span id="rvT">${timeLeft(it.at - Date.now())}</span><small>Подарок придёт в Telegram через 24 часа после заявки</small></div><div class="btns"><button class="btn ghost block" data-close>Закрыть</button></div>`
           : `<div class="btns"><button class="btn gold block" id="sl">Продать за ${COIN}${fmt(g.price, 0)}</button><button class="btn vio block" id="wd">Вывести в Telegram</button><button class="btn ghost block" data-close>Оставить</button></div>
-        <div class="vf-sub" style="margin-top:10px">Для продажи и вывода нужно 5 проверенных друзей: <b>${Math.min(s.free, Verify.NEED)} / ${Verify.NEED}</b></div>`}</div>`, { type: 'modal' });
+        ${it.free ? `<div class="vf-sub" style="margin-top:10px">Подарок из бесплатного кейса: для продажи и вывода нужно 5 проверенных друзей: <b>${Math.min(s.free, Verify.NEED)} / ${Verify.NEED}</b></div>` : ''}`}</div>`, { type: 'modal' });
       if (review) { const t = setInterval(() => { const e = $('#rvT', p); if (!e) return clearInterval(t); e.textContent = timeLeft(it.at - Date.now()); }, 1000); return; }
       $('#sl', p).onclick = () => { p.close(); Verify.sell(u, inv); };
       $('#wd', p).onclick = () => { p.close(); Verify.withdraw(u, inv); };

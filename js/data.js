@@ -73,3 +73,13 @@ const VIP = [
   { n: 'Легенда',        xp: 6000, cb: '8%', reward: 3000 }
 ];
 const PROMOS = { UPBAER: 100, WELCOME: 250, BEAR: 50, GIFTS: 150 };
+
+/* ---------- Розыгрыш ----------
+   Бот может подменить этот объект (GET CFG.API/raffle, см. BACKEND.md).
+   prizes: места from..to получают подарок g (индекс в G) — count штук на каждого. Любое число призовых ступеней.
+   Пример: 5 NFT по одному на места 1–5 и 50 мишек на места 6–55. */
+const RAFFLE = {
+  id: 'r1', title: 'Розыгрыш 3 NFT', per: 10,                    // 1 билет за каждые 10 USD, потраченные в играх и кейсах
+  ends: (() => { const d = new Date(); d.setDate(d.getDate() + ((7 - d.getDay()) % 7 || 7)); d.setHours(20, 0, 0, 0); return d.getTime(); })(),
+  prizes: G.slice().sort((a, b) => b.price - a.price).slice(0, 3).map((g, k) => ({ from: k + 1, to: k + 1, g: g.i, count: 1 }))
+};

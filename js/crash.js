@@ -3,6 +3,7 @@ const Crash = (() => {
   const K = .15;                                   // скорость роста: x = e^(K·t)
   const LEVELS = [1.5, 2, 3, 5, 10, 20, 50, 100];
   const crashAt = () => Math.random() < .04 ? 1 : Math.min(500, Math.max(1.01, Math.floor(96 / (1 - Math.random())) / 100));
+  const RK_W = 96, RK_H = 102.4, RK_AX = 16 * Math.PI / 180, RK_NX = -39, RK_NY = 23.7;   // размер картинки, наклон оси, сопло относительно центра
   const tier = m => m >= 10 ? 't3' : m >= 4 ? 't2' : m >= 2 ? 't1' : '';
 
   function open() {
@@ -12,7 +13,7 @@ const Crash = (() => {
     const hist = [1.84, 3.2, 1.12, 7.5, 2.05, 1.5, 12.4, 1.01, 2.7];
 
     const body = Sub.open('Краш', `
-      <div class="cr-stage" id="stage"><canvas id="cv"></canvas><div class="rk-rocket" id="rk">${giftImg(55)}</div>
+      <div class="cr-stage" id="stage"><canvas id="cv"></canvas><div class="rk-rocket" id="rk"><img src="assets/rocket.png" alt="" draggable="false"></div>
         <div class="cr-mult" id="crM"><b>1.00</b><i>x</i></div><div class="cr-sub" id="crS"></div></div>
       <div class="cr-hist" id="hist"></div>
       <div class="sl-ctl">
@@ -67,18 +68,27 @@ const Crash = (() => {
       ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = red ? 'rgba(255,111,128,.18)' : 'rgba(34,197,94,.2)'; ctx.lineWidth = 13; ctx.stroke(); ctx.strokeStyle = g; ctx.lineWidth = 4.5; ctx.stroke();
       ctx.lineTo(ex, H - padB); ctx.lineTo(padL, H - padB); ctx.closePath();
       const fg = ctx.createLinearGradient(0, ey, 0, H); fg.addColorStop(0, red ? 'rgba(255,111,128,.22)' : 'rgba(34,197,94,.26)'); fg.addColorStop(1, 'rgba(130,103,255,0)'); ctx.fillStyle = fg; ctx.fill();
-      /* ракета (NFT) + след */
+      /* ракета (картинка) + огонь из сопла */
       let rx = ex, ry = ey, ang = -Math.PI / 4; const show = flying || (phase === 'idle' && !crashed);
       if (flying && t > .05) { const [px, py] = pt(t - .06, Math.exp(K * (t - .06)), tv, ym); ang = Math.atan2(ey - py, ex - px); }
-      if (!flying) { rx = padL + 20; ry = H - padB - 18 + Math.sin(now / 420) * 3; }
+      if (!flying) { rx = padL + 44; ry = H - padB - 40 + Math.sin(now / 420) * 3; } else { rx -= Math.cos(ang) * 26; ry -= Math.sin(ang) * 26; }
       if (show) {
-        rk.style.opacity = 1; rk.style.transform = `translate3d(${(rx - 27).toFixed(1)}px,${(ry - 27).toFixed(1)}px,0) rotate(${(ang * 180 / Math.PI + 45).toFixed(1)}deg)`;
-        if (flying) for (let k = 0; k < 2; k++) parts.push({ x: rx - Math.cos(ang) * 22, y: ry - Math.sin(ang) * 22, vx: -Math.cos(ang) * 40 + (Math.random() - .5) * 26, vy: -Math.sin(ang) * 40 + (Math.random() - .5) * 26, life: 1, d: .5 + Math.random() * .4, s: 1.5 + Math.random() * 2.6, h: 20 + Math.random() * 30 });
+        const th = ang + RK_AX, c = Math.cos(th), s = Math.sin(th), nx = rx + c * RK_NX - s * RK_NY, ny = ry + s * RK_NX + c * RK_NY;
+        rk.style.opacity = 1; rk.style.transform = `translate3d(${(rx - RK_W / 2).toFixed(1)}px,${(ry - RK_H / 2).toFixed(1)}px,0) rotate(${(th * 180 / Math.PI).toFixed(1)}deg)`;
+        const bx = -Math.cos(ang), by = -Math.sin(ang), px2 = -by, py2 = bx, pw = flying ? 1 : .45, fl = (22 + Math.min(34, m * 1.6)) * pw * (.85 + .15 * Math.sin(now / 38) + Math.random() * .12);
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        [[1, 'rgba(255,90,20,.55)', 1], [.72, 'rgba(255,170,40,.75)', .7], [.42, 'rgba(255,245,200,.95)', .42]].forEach(([k, col, wk]) => {
+          const L = fl * k * 1.25, w = 9 * wk * (.9 + Math.random() * .2) + 2;
+          ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(nx + px2 * w, ny + py2 * w);
+          ctx.quadraticCurveTo(nx + bx * L * .55 + px2 * w * 1.05, ny + by * L * .55 + py2 * w * 1.05, nx + bx * L, ny + by * L);
+          ctx.quadraticCurveTo(nx + bx * L * .55 - px2 * w * 1.05, ny + by * L * .55 - py2 * w * 1.05, nx - px2 * w, ny - py2 * w); ctx.closePath(); ctx.fill(); });
+        ctx.restore();
+        if (flying) for (let k = 0; k < (document.documentElement.classList.contains('lite') ? 1 : 3); k++) parts.push({ x: nx + bx * 6, y: ny + by * 6, vx: bx * (90 + Math.random() * 90) + (Math.random() - .5) * 40, vy: by * (90 + Math.random() * 90) + (Math.random() - .5) * 40, life: 1, d: .35 + Math.random() * .4, s: 1.4 + Math.random() * 2.6, h: 18 + Math.random() * 34 });
       } else rk.style.opacity = 0;
       /* частицы */
       if (parts.length > 140) parts.splice(0, parts.length - 140); parts = parts.filter(p => p.life > 0); parts.forEach(p => { p.life -= dt / p.d; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= .985; p.vy *= .985;
-        ctx.globalAlpha = Math.max(0, p.life); ctx.fillStyle = `hsl(${p.h},95%,${55 + (1 - p.life) * 10}%)`; ctx.beginPath(); ctx.arc(p.x, p.y, p.s * (.4 + p.life * .6), 0, 6.283); ctx.fill(); });
-      ctx.globalAlpha = 1; ctx.restore();
+        ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = Math.max(0, p.life); ctx.fillStyle = `hsl(${p.h},95%,${55 + (1 - p.life) * 10}%)`; ctx.beginPath(); ctx.arc(p.x, p.y, p.s * (.4 + p.life * .6), 0, 6.283); ctx.fill(); });
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.restore();
     }
 
     function setMult(m, cls) { mB.textContent = fmt(m); mEl.className = 'cr-mult ' + (cls || tier(m)); }

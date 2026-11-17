@@ -1,5 +1,6 @@
 /* ============ ПРОВЕРКА ДРУЗЕЙ · ВЫВОД И ПРОДАЖА ПОДАРКОВ ============
-   Чтобы продать или вывести ОДИН подарок, нужно 5 проверенных друзей (каждый друг — только за один подарок).
+   Подарки из платных кейсов и апгрейда продаются и выводятся БЕЗ проверки.
+   Подарок, выбитый в БЕСПЛАТНОМ (ежедневном) кейсе, чтобы продать или вывести, требует 5 проверенных друзей (друг — только за один подарок).
    Друг «проверен», когда: пришёл по ссылке · у него Telegram Premium · в профиле есть подарки ·
    подтвердил активность видео в боте · крутанул бонусную рулетку.
    Вывод: подарок приходит в Telegram через 24 часа после проверки. Продажа: баланс зачисляется сразу.
@@ -41,7 +42,7 @@ const Verify = (() => {
 
   /* ---- правила ---- */
   const rulesHTML = () => `<ol class="vf-rules">
-    <li><b>5 друзей на каждый подарок.</b> Чтобы продать или вывести один подарок, нужно 5 проверенных друзей. Один друг засчитывается только за один подарок.</li>
+    <li><b>Платные кейсы и апгрейд:</b> подарки продаются и выводятся без проверки друзей.</li><li><b>Бесплатный (ежедневный) кейс:</b> чтобы продать или вывести такой подарок, нужно 5 проверенных друзей. Один друг засчитывается только за один подарок.</li>
     <li><b>Друг считается проверенным, если:</b><ul><li>пришёл по твоей ссылке;</li><li>у него есть Telegram Premium;</li><li>в его профиле есть подарки;</li><li>он подтвердил в боте, что аккаунт активный (видео);</li><li>он крутанул бонусную рулетку.</li></ul></li>
     <li><b>Вывод:</b> подарок приходит в Telegram через 24 часа после проверки.</li>
     <li><b>Продажа:</b> когда условия выполнены, сумма сразу зачисляется на баланс.</li>
@@ -52,6 +53,12 @@ const Verify = (() => {
   /* ---- окно «нужно 5 друзей» / подтверждение ---- */
   function gate(u, mode, done) {
     const it = S.inv.find(x => x.u === u); if (!it) return; const g = G[it.g], s = stats(), ok = s.free >= NEED, sell = mode === 'sell';
+    if (!it.free) {                                   // платный подарок — без проверки друзей
+      if (sell) { sellItem(u); sfx.win(); hap('success'); toast('Продано за ' + fmt(g.price, 0) + ' ' + CFG.CURRENCY); save(); done && done(); return; }
+      const q = pop(`<div class="vf"><div class="vf-g r-${g.rar}">${giftImg(g.i)}</div><h3 class="pt">Вывод: ${esc(g.name)}</h3><div class="vf-note">Подарок придёт в Telegram через 24 часа после заявки.</div><button class="btn gold block" id="vfOk" style="margin-top:14px">Запросить вывод</button><button class="btn ghost block" data-close style="margin-top:8px">Отмена</button></div>`, { type: 'modal' });
+      $('#vfOk', q).onclick = () => { it.st = 'review'; it.at = Date.now() + REVIEW; logH('gift', 'Заявка на вывод: «' + g.name + '»', 0); sfx.win(); hap('success'); toast('Заявка принята. Подарок придёт через 24 часа'); save(); q.close(); done && done(); };
+      return;
+    }
     const seg = Array.from({ length: NEED }, (_, i) => `<i class="${i < Math.min(s.free, NEED) ? 'on' : ''}"></i>`).join('');
     const p = pop(`<div class="vf">
       <div class="vf-g r-${g.rar}">${giftImg(g.i)}</div>
@@ -81,7 +88,7 @@ const Verify = (() => {
   function friendsHTML(link) {
     const s = stats(), L = (S.rl || []).slice().reverse();
     return `<div class="card ref"><b style="font-size:15px">Друзья</b>
-      <div class="muted" style="font-size:12.5px;margin-top:4px;line-height:1.45">+100 ${CFG.CURRENCY} тебе и другу сразу и 5% от его активности. Для продажи или вывода подарка нужно 5 проверенных друзей.</div>
+      <div class="muted" style="font-size:12.5px;margin-top:4px;line-height:1.45">+100 ${CFG.CURRENCY} тебе и другу сразу и 5% от его активности. Нужны только для подарков из бесплатного кейса: 5 друзей на подарок.</div>
       <div class="lnk">${esc(link)}</div>
       <div class="row"><button class="btn ghost sp sm" id="refCopy">Копировать</button><button class="btn vio sp sm" id="refShare">Пригласить</button></div>
       <div class="vf-stats" style="margin-top:14px"><div><b>${s.invited}</b><span>Приглашено</span></div><div><b>${s.passed}</b><span>Прошли проверку</span></div><div><b>${s.spun}</b><span>Крутанули рулетку</span></div></div>

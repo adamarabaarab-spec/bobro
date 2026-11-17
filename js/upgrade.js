@@ -97,7 +97,7 @@ const Upgrade = (() => {
       await sleep(dur + 100); stopTk(); if (!alive) return;
       ang = fin % 360; needle.style.transition = 'none'; needle.style.transform = `rotate(${ang}deg)`;
       stage.classList.remove('spin'); stage.classList.add(win ? 'won' : 'lost'); setTimeout(() => stage.classList.remove('won', 'lost'), 1800);
-      if (win) { giveItem(tgt.i); logH('upgrade', `Апгрейд: «${tgt.name}»`, tgt.price - s); sfx.big(); hap('success'); }
+      if (win) { giveItem(tgt.i, used.some(it => it.free)); logH('upgrade', `Апгрейд: «${tgt.name}»`, tgt.price - s); sfx.big(); hap('success'); }
       else { logH('upgrade', 'Апгрейд: неудача', -s); sfx.lose(); hap('heavy'); }
       sel = new Set(); stake = Math.min(stake, Math.floor(S.bal)); if (win) target = null; busy = false; paintStage(); paintPick();
       const m = pop(win

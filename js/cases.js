@@ -28,13 +28,13 @@ const Cases = (() => {
     const c = CASES.find(x => x.id === id); let demo = false, fast = false, busy = false, arr = [], cur = 0, timer = null, raf = 0, stopTk = null;
     const body = Sub.open(c.name, `
       <div class="cstage">
-        <div class="cs-head"><div class="gi">${giftImg(c.cover[1])}</div><div><h2>${c.name} кейс</h2><p>${c.free ? 'Шанс подарка 1%' : 'RTP ' + fmt(c.rtp * 100, 1) + '%'}</p></div></div>
+        <div class="cs-head"><div class="gi">${giftImg(c.cover[1])}</div><div><h2>${c.name} кейс</h2><p>${c.free ? 'Бесплатно раз в сутки' : 'Цена открытия ' + COIN + fmt(c.price, 0)}</p></div></div>
         <div class="roul"><div class="strip"></div><div class="rmark"></div></div>
         <div class="cs-ctl"><button class="btn gold block" id="goBtn"></button>
           <div class="cs-opt"><label><span class="switch" id="swDemo"></span>Демо-режим</label><label>Быстро<span class="switch" id="swFast"></span></label></div></div>
       </div>
       <div class="h2">Что может выпасть <small>${c.drops.filter(d => !d.g.empty).length} предметов</small></div>
-      <div class="dgrid">${c.drops.map(d => d.g.empty ? `<div class="dcard empty"><span class="dch">${pctFmt(d.p)}%</span><div class="gi">${EMPTY_ART}</div><div class="dn">Пусто</div><div class="dp">—</div></div>` : `<div class="dcard r-${d.g.rar}"><span class="dch">${pctFmt(d.p)}%</span><div class="gi">${giftImg(d.g.i)}</div><div class="dn">${esc(d.g.name)}</div><div class="dp">${COIN}${fmt(d.g.price, 0)}</div></div>`).join('')}</div>`,
+      <div class="dgrid">${c.drops.map(d => d.g.empty ? `<div class="dcard empty"><div class="gi">${EMPTY_ART}</div><div class="dn">Пусто</div><div class="dp">—</div></div>` : `<div class="dcard r-${d.g.rar}"><div class="gi">${giftImg(d.g.i)}</div><div class="dn">${esc(d.g.name)}</div><div class="dp">${COIN}${fmt(d.g.price, 0)}</div></div>`).join('')}</div>`,
       { bg: .72, onClose: () => { clearInterval(timer); cancelAnimationFrame(raf); stopTk && stopTk(); } });
     const strip = $('.strip', body), roul = $('.roul', body), mark = $('.rmark', body), btn = $('#goBtn', body);
     const cx = () => roul.clientWidth / 2;
@@ -68,17 +68,17 @@ const Cases = (() => {
       strip.style.transition = `transform ${dur}s cubic-bezier(.08,.6,.1,1)`; strip.style.transform = `translateX(${xAt(WIN, off)}px)`;
       /* щелчок каждый раз, когда под маркером проходит новая карточка — по той же кривой, что и анимация */
       const p0 = 5 + CW / 2 / W, p1 = WIN + CW / 2 / W + off / W;
-      stopTk = runRatchet(dur * 1000, EASE, p0, p1, { vol: .5, maxPerFrame: 3, onTooth: () => { hap('select'); mark.classList.add('tk'); setTimeout(() => mark.classList.remove('tk'), 70); } });
+      stopTk = runRatchet(dur * 1000, EASE, p0, p1, { vol: .5, maxPerFrame: 3, onTooth: () => hap('select') });
       await sleep(dur * 1000 + 120); stopTk && stopTk(); cur = WIN;
       $$('.cell', strip).forEach((el, i) => el.classList.add(i === WIN ? 'won' : 'dim'));
       if (win.empty) { hap('light'); sfx.lose(); if (!demo) logH('case', `${c.name}: пусто`, 0); }
-      else { hap(win.rar === 'legend' || win.rar === 'epic' ? 'heavy' : 'medium'); (win.rar === 'legend' || win.rar === 'epic') ? sfx.big() : sfx.win(); if (!demo) { giveItem(win.i); logH('case', `${c.name}: «${win.name}»`, win.price); } }
+      else { hap(win.rar === 'legend' || win.rar === 'epic' ? 'heavy' : 'medium'); (win.rar === 'legend' || win.rar === 'epic') ? sfx.big() : sfx.win(); if (!demo) { giveItem(win.i, !!c.free); logH('case', `${c.name}: «${win.name}»`, win.price); } }
       await sleep(650); showResult(win);
     };
 
     function showResult(g) {
       if (g.empty) {
-        const w = pop(`<div class="res r-lose"><div class="res-t">${demo ? 'Демо · ' : ''}Пусто</div><div class="res-g emp">${EMPTY_ART}</div><h3>Не повезло</h3><div class="muted" style="font-size:13px;margin-top:4px">Шанс подарка — 1%. Попробуй завтра.</div>
+        const w = pop(`<div class="res r-lose"><div class="res-t">${demo ? 'Демо · ' : ''}Пусто</div><div class="res-g emp">${EMPTY_ART}</div><h3>Не повезло</h3><div class="muted" style="font-size:13px;margin-top:4px">Попробуй завтра.</div>
           <div class="btns"><button class="btn vio block" data-close>Ок</button></div></div>`, { type: 'modal' });
         w.locked = false; w.onclose = () => { busy = false; $$('.cell', strip).forEach(el => el.classList.remove('won', 'dim')); label(); }; return;
       }

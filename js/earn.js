@@ -16,12 +16,9 @@ const Earn = (() => {
   ];
 
   function earnHTML() {
-    const acc = accrued(), cap = rate() * CAP_H, days = streakNow(), today = S.daily.last === dayKey();
+    const days = streakNow(), today = S.daily.last === dayKey();
     return `<div class="page">
-      <div class="farm"><div class="farm-h">
-        <div class="ring"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="7"/><circle id="ringC" cx="50" cy="50" r="44" fill="none" stroke="url(#rg)" stroke-width="7" stroke-linecap="round" stroke-dasharray="276.5" stroke-dashoffset="${276.5 * (1 - acc / cap)}"/><defs><linearGradient id="rg"><stop offset="0" stop-color="#8267ff"/><stop offset="1" stop-color="#4fe08a"/></linearGradient></defs></svg><div class="gi">${giftImg(136)}</div></div>
-        <div><h3>Берлога · ур. ${S.farm.lvl}</h3><p>Мишка копит ${CFG.CURRENCY} сам: ${rate()}/час, до ${CAP_H} часов.<br><span class="gold" style="font-weight:800" id="farmAcc">${COIN} ${fmt(acc)}</span> накоплено</p></div></div>
-        <div class="acts"><button class="btn gold" id="farmClaim">Собрать</button><button class="btn ghost" id="farmUp">Улучшить · ${fmt(upCost(), 0)}</button></div></div>
+      ${Raffle.adsHTML()}
 
       <div class="h2">Ежедневная награда <small>${today ? 'Получено сегодня' : 'Доступна'}</small></div>
       <div class="stk">${DAILY.map((v, i) => `<div class="day ${i < days ? 'done' : (!today && i === days ? 'now' : '')}">День ${i + 1}<div class="gi">${i === 6 ? giftImg(105) : COIN.replace('class="coin"', 'class="coin" style="width:28px;height:28px;margin:4px auto;display:block"')}</div><b>${i === 6 ? '' : ''}${v}</b></div>`).join('')}</div>
@@ -41,8 +38,7 @@ const Earn = (() => {
     return `<div class="task card"><div class="ic">${giftImg(t.ic)}</div><div class="tx"><b>${t.t}</b><span>${sub}</span>${bar}</div><div style="text-align:right;display:flex;flex-direction:column;gap:6px;align-items:flex-end"><span class="rew">${COIN}${t.r}</span>${done ? '<span class="green" style="font-weight:800;font-size:12px">✓ Получено</span>' : btn}</div></div>`;
   }
   function bindEarn(v) {
-    $('#farmClaim', v).onclick = () => { const a = accrued(); if (a < 1) return toast('Пока рано — копится…'); S.farm.t = Date.now(); addBal(Math.floor(a)); logH('farm', 'Берлога', Math.floor(a)); hap('success'); sfx.win(); toast('+' + fmt(Math.floor(a), 0) + ' ' + CFG.CURRENCY); renderTab(false); };
-    $('#farmUp', v).onclick = () => { if (!canPay(upCost())) return; addBal(-upCost()); S.farm.lvl++; save(); hap('success'); toast('Берлога улучшена!'); renderTab(false); };
+    Raffle.bindAds(v);
     $('#dailyB', v).onclick = () => {
       if (S.daily.last === dayKey()) return; const s = streakNow(); const r = DAILY[s];
       S.daily = { last: dayKey(), streak: s + 1 }; addBal(r); logH('daily', 'Ежедневная награда', r); if (s === 6) { giftItemFor(105); toast('7-й день: подарок «' + G[105].name + '»'); } hap('success'); sfx.win(); toast('+' + r + ' ' + CFG.CURRENCY); renderTab(false);
@@ -57,7 +53,7 @@ const Earn = (() => {
     $('#refCopy', v).onclick = () => { copyText(refLink()); hap('success'); toast('Ссылка скопирована'); };
     $('#refShare', v).onclick = () => openTG(`https://t.me/share/url?url=${encodeURIComponent(refLink())}&text=${encodeURIComponent('Залетай в UpBaer — открывай кейсы с подарками и играй 🐻🎁')}`);
   }
-  const giftItemFor = gi => { giveItem(gi); logH('gift', 'Подарок: «' + G[gi].name + '»', G[gi].price); return gi; };
+  const giftItemFor = gi => { giveItem(gi, true); logH('gift', 'Подарок: «' + G[gi].name + '»', G[gi].price); return gi; };
 
   /* ---- Бонусы ---- */
   /* призы от 0,30 до 5 USD: чем дороже — тем реже. Порядок секторов — как на баннере (белый / розовый / белый / фиолетовый) */
@@ -105,7 +101,6 @@ const Earn = (() => {
   }
   /* живое обновление таймеров */
   setInterval(() => {
-    const c = $('#ringC'); if (c) { const cap = rate() * CAP_H, a = accrued(); c.style.strokeDashoffset = 276.5 * (1 - a / cap); const f = $('#farmAcc'); if (f) f.innerHTML = `${COIN} ${fmt(a)}`; }
     const wb = $('#wheelB'); if (wb && !wb.disabled && false) {} else if (wb && Date.now() - S.wheel < DAY && !wb.textContent.includes('24:00:00')) { wb.textContent = 'Следующий спин через ' + timeLeft(DAY - (Date.now() - S.wheel)); }
     $$('.ccard.big .tag').forEach(t => { const l = DAY - (Date.now() - S.free); if (l > 0) t.textContent = 'Через ' + timeLeft(l); });
   }, 1000);
